@@ -1,8 +1,9 @@
 # config valid only for Capistrano 3.1
 lock '3.2.1'
 
-set :application, 'my_app_name'
-set :repo_url, 'git@example.com:me/my_repo.git'
+set :application, 'docker_capistrano_rails_sample'
+set :repo_url, 'git@github.com:irohiroki/docker_capistrano_rails_sample.git'
+set :containers_log, deploy_path + 'containers.log'
 
 # Default branch is :master
 # ask :branch, proc { `git rev-parse --abbrev-ref HEAD`.chomp }.call
@@ -20,7 +21,7 @@ set :repo_url, 'git@example.com:me/my_repo.git'
 # set :log_level, :debug
 
 # Default value for :pty is false
-# set :pty, true
+set :pty, true  # for sudo
 
 # Default value for :linked_files is []
 # set :linked_files, %w{config/database.yml}
@@ -34,14 +35,75 @@ set :repo_url, 'git@example.com:me/my_repo.git'
 # Default value for keep_releases is 5
 # set :keep_releases, 5
 
+def docker_run_opts
+  %W(
+    -e RAILS_ENV=#{fetch(:rails_env)}
+    -e SECRET_KEY_BASE=#{fetch(:secret_key_base)}
+    -e DB_HOST=#{fetch(:db_host)}
+    -e DB_USERNAME=#{fetch(:db_username)}
+    -e DB_PASSWORD=#{fetch(:db_password)}
+    -v #{shared_path}/log:/app/log
+    -v #{shared_path}/public/assets:/app/public/assets
+    -v #{shared_path}/tmp/cache:/app/tmp/cache
+    -v #{shared_path}/tmp/sessions:/app/tmp/sessions
+    -v #{shared_path}/tmp/sockets:/app/tmp/sockets
+    #{fetch(:application)}
+  )
+end
+
 namespace :deploy do
+  namespace :docker do
+    desc 'Make rake run in container'
+    task :map_rake do
+      SSHKit.config.command_map[:rake] = "sudo docker run --rm #{docker_run_opts.join(' ')} rake"
+    end
+
+    before 'deploy:updated', 'deploy:docker:map_rake'
+
+    desc 'Build image'
+    task :build do
+      on roles(:app) do
+        within release_path do
+          sudo :docker, "build", "-t", fetch(:application), "."
+        end
+      end
+    end
+
+    after 'deploy:updating', 'deploy:docker:build'
+
+    desc 'Run application container'
+    task :run do
+      on roles(:app) do
+        set :cid, capture(:sudo, "docker", "run", "-d", "-P", *docker_run_opts)
+        set :host_port, capture(:sudo, "docker", "port", fetch(:cid), 3000)
+      end
+    end
+
+    desc 'Stop old container'
+    task :stop do
+      on roles(:app) do
+        if test "[ -e #{fetch(:containers_log)} ]"
+          old_cid = capture(:tail, "-1", fetch(:containers_log)).split(' ').last
+          test :sudo, "docker", "stop", old_cid  # ignore failure
+        end
+      end
+    end
+
+    desc 'Log container id'
+    task :log do
+      on roles(:app) do
+        execute %|echo "Tree #{fetch(:current_revision)} run in #{fetch(:cid)}" >> #{fetch(:containers_log)}|
+      end
+    end
+
+    after 'deploy:docker:run', 'deploy:docker:stop'
+    after 'deploy:docker:run', 'deploy:docker:log'
+  end
 
   desc 'Restart application'
   task :restart do
-    on roles(:app), in: :sequence, wait: 5 do
-      # Your restart mechanism here, for example:
-      # execute :touch, release_path.join('tmp/restart.txt')
-    end
+    invoke 'deploy:docker:run'
+    # route your web server to the new container
   end
 
   after :publishing, :restart

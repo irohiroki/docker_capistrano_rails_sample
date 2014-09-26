@@ -49,6 +49,7 @@ test:
 #
 production:
   <<: *default
+  host: <%= ENV['DB_HOST'] %>
   database: DockerCapistranoRailsSample_production
-  username: DockerCapistranoRailsSample
-  password: <%= ENV['DOCKERCAPISTRANORAILSSAMPLE_DATABASE_PASSWORD'] %>
+  username: <%= ENV['DB_USERNAME'] %>
+  password: <%= ENV['DB_PASSWORD'] %>
