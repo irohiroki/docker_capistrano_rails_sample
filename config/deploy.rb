@@ -100,10 +100,22 @@ namespace :deploy do
     after 'deploy:docker:run', 'deploy:docker:log'
   end
 
+  # example task to reconfigure web server
+  # namespace :web do
+  #   desc 'Restart web frontend'
+  #   task :restart do
+  #     on roles(:web) do
+  #       sudo :sed, "-i", "/proxy_pass/s/[0-9][.:0-9]*/#{fetch(:host_port)}/", "/etc/nginx/sites-available/app"
+  #       sudo :service, "nginx", "reload"
+  #     end
+  #   end
+  # end
+
   desc 'Restart application'
   task :restart do
     invoke 'deploy:docker:run'
-    # route your web server to the new container
+    # route your web server to the new container. eg.:
+    # invoke 'deploy:web:restart'
   end
 
   after :publishing, :restart

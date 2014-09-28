@@ -31,3 +31,4 @@ To complete your deployment
 ---------------------------
 
 You have to write a task that configure your web server at the end of deployments.
+An example is included in the `deploy.rb` as a comment.
