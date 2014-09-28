@@ -5,4 +5,4 @@ ADD . /app
 WORKDIR /app
 RUN bundle install --without="development"
 EXPOSE 3000
-CMD ["rails", "server"]
+CMD ["rails", "server", "puma"]
